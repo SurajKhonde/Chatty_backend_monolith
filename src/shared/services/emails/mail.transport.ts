@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import Mail from 'nodemailer/lib/mailer';
+import type Mail from 'nodemailer/lib/mailer';
 import Logger from 'bunyan';
 import sendGridMail from '@sendgrid/mail';
 import { config } from '@root/config';
@@ -12,62 +12,87 @@ interface IMailOptions {
   html: string;
 }
 
-const log: Logger = config.createLogger('mailOptions');
-// sendGridMail.setApiKey(config.SENDGRID_API_KEY!);
-if (config.SENDGRID_API_KEY?.startsWith('SG.')) {
+const log: Logger = config.createLogger('mailTransport');
+const isProd = config.NODE_ENV === 'production';
+if (isProd) {
+  if (!config.SENDGRID_API_KEY || !config.SENDGRID_API_KEY.startsWith('SG.')) {
+    throw new Error('SENDGRID_API_KEY is missing/invalid in production');
+  }
   sendGridMail.setApiKey(config.SENDGRID_API_KEY);
 }
+
 class MailTransport {
-  public async sendEmail(receiverEmail: string, subject: string, body: string): Promise<void> {
-    if (config.NODE_ENV === 'test' || config.NODE_ENV === 'development') {
-      this.developmentEmailSender(receiverEmail, subject, body);
-    } else {
-      this.productionEmailSender(receiverEmail, subject, body);
+  public async sendEmail(
+    receiverEmail: string,
+    subject: string,
+    body: string
+  ): Promise<void> {
+    try {
+      if (config.NODE_ENV === 'development' || config.NODE_ENV === 'test') {
+        await this.developmentEmailSender(receiverEmail, subject, body);
+      } else if (config.NODE_ENV === 'production') {
+        await this.productionEmailSender(receiverEmail, subject, body);
+      } else {
+        await this.developmentEmailSender(receiverEmail, subject, body);
+      }
+    } catch (error) {
+      log.error({ err: error }, 'Error sending email');
+      throw new BadRequestError('Error sending email');
     }
   }
 
-  private async developmentEmailSender(receiverEmail: string, subject: string, body: string): Promise<void> {
+  private async developmentEmailSender(
+    receiverEmail: string,
+    subject: string,
+    body: string
+  ): Promise<void> {
+    if (!config.SENDER_EMAIL || !config.SENDER_EMAIL_PASSWORD) {
+      throw new Error('SENDER_EMAIL / SENDER_EMAIL_PASSWORD missing for dev/test');
+    }
+
     const transporter: Mail = nodemailer.createTransport({
       host: 'smtp.ethereal.email',
       port: 587,
       secure: false,
       auth: {
-        user: config.SENDER_EMAIL!,
-        pass: config.SENDER_EMAIL_PASSWORD!
-      }
+        user: config.SENDER_EMAIL,
+        pass: config.SENDER_EMAIL_PASSWORD,
+      },
     });
 
     const mailOptions: IMailOptions = {
-      from: `Chatty App <${config.SENDER_EMAIL!}>`,
+      from: `Chatty App <${config.SENDER_EMAIL}>`,
       to: receiverEmail,
       subject,
-      html: body
+      html: body,
     };
 
-    try {
-      await transporter.sendMail(mailOptions);
-      log.info('Development email sent successfully.');
-    } catch (error) {
-      log.error('Error sending email', error);
-      throw new BadRequestError('Error sending email');
-    }
+    const info = await transporter.sendMail(mailOptions);
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    log.info(
+      { messageId: info.messageId, previewUrl },
+      'Development email sent successfully'
+    );
   }
 
-  private async productionEmailSender(receiverEmail: string, subject: string, body: string): Promise<void> {
+  private async productionEmailSender(
+    receiverEmail: string,
+    subject: string,
+    body: string
+  ): Promise<void> {
+    if (!config.SENDER_EMAIL) {
+      throw new Error('SENDER_EMAIL missing in production');
+    }
+
     const mailOptions: IMailOptions = {
-      from: `Chatty App <${config.SENDER_EMAIL!}>`,
+      from: `Chatty App <${config.SENDER_EMAIL}>`,
       to: receiverEmail,
       subject,
-      html: body
+      html: body,
     };
 
-    try {
-      await sendGridMail.send(mailOptions);
-      log.info('Production email sent successfully.');
-    } catch (error) {
-      log.error('Error sending email', error);
-      throw new BadRequestError('Error sending email');
-    }
+    await sendGridMail.send(mailOptions);
+    log.info({ to: receiverEmail, subject }, 'Production email sent successfully');
   }
 }
 

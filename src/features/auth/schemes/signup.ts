@@ -7,11 +7,16 @@ const signupSchema: ObjectSchema = Joi.object().keys({
     'string.max': 'Invalid username',
     'string.empty': 'Username is a required field'
   }),
-  password: Joi.string().required().min(4).max(8).messages({
+  password: Joi.string()
+  .required()
+  .min(8)
+  .pattern(/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^\w\s]).+$/)
+  .messages({
     'string.base': 'Password must be of type string',
-    'string.min': 'Invalid password',
-    'string.max': 'Invalid password',
-    'string.empty': 'Password is a required field'
+    'string.empty': 'Password is a required field',
+    'string.min': 'Password must be at least 8 characters',
+    'string.pattern.base':
+      'Password must contain at least 1 letter, 1 number, and 1 special character'
   }),
   email: Joi.string().required().email().messages({
     'string.base': 'Email must be of type string',
