@@ -142,22 +142,24 @@ npm run seeds:dev     # seed users via API (requires API_URL)
 ## Architecture
 
 ### High-level components
+
 ```mermaid
 flowchart LR
-  FE[Frontend (React)] -->|HTTP REST| API[Express API :5000]
-  FE -->|Socket.IO| API
+FE["Frontend (React)"] -->|"HTTP REST"| API["Express API (port 5000)"]
+FE -->|"Socket.IO"| API
 
-  API -->|Read/Write| Mongo[(MongoDB)]
-  API -->|Cache reads/writes| Redis[(Redis)]
+API -->|"Read/Write"| Mongo[(MongoDB)]
+API -->|"Cache reads/writes"| Redis[(Redis)]
 
-  API -->|enqueue jobs| Bull[(Bull queues on Redis)]
-  Bull -->|process jobs| Workers[Background workers]
-  Workers -->|DB writes| Mongo
-  Workers -->|emit realtime| SIO[Socket.IO server]
-  Workers -->|send email| Email[Email (Ethereal dev / SendGrid prod)]
+API -->|"Enqueue jobs"| Bull["Bull queues (Redis)"]
+Bull -->|"Process jobs"| Workers["Background workers"]
+Workers -->|"DB writes"| Mongo
+Workers -->|"Emit realtime"| SIO["Socket.IO server"]
+Workers -->|"Send email"| Email["Email (Ethereal dev / SendGrid prod)"]
 
-  API -->|uploads| Cloudinary[(Cloudinary)]
-  Workers -->|uploads metadata| Mongo
+API -->|"Uploads"| Cloudinary[(Cloudinary)]
+Workers -->|"Uploads metadata"| Mongo
+
 ```
 
 ### Scaling view (multiple instances)
@@ -165,14 +167,15 @@ Socket.IO is scaled using the **Redis adapter** so events can broadcast across i
 
 ```mermaid
 flowchart TB
-  LB[Load Balancer (ALB)] --> A1[Node/Express + Socket.IO Instance A]
-  LB --> A2[Node/Express + Socket.IO Instance B]
+LB["Load Balancer (ALB)"] --> A1["Node/Express + Socket.IO (Instance A)"]
+LB --> A2["Node/Express + Socket.IO (Instance B)"]
 
-  A1 <--> Redis[(Redis: cache + queues + socket adapter)]
-  A2 <--> Redis
+A1 <--> Redis[(Redis: cache + queues + socket adapter)]
+A2 <--> Redis
 
-  A1 --> Mongo[(MongoDB)]
-  A2 --> Mongo
+A1 --> Mongo[(MongoDB)]
+A2 --> Mongo
+
 ```
 
 ---
